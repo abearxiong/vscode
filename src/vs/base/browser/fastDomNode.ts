@@ -25,7 +25,9 @@ export class FastDomNode<T extends HTMLElement> {
 	private _display: string;
 	private _position: string;
 	private _visibility: string;
+	private _backgroundColor: string;
 	private _layerHint: boolean;
+	private _contain: 'none' | 'strict' | 'content' | 'size' | 'layout' | 'style' | 'paint';
 
 	constructor(domNode: T) {
 		this.domNode = domNode;
@@ -46,7 +48,9 @@ export class FastDomNode<T extends HTMLElement> {
 		this._display = '';
 		this._position = '';
 		this._visibility = '';
+		this._backgroundColor = '';
 		this._layerHint = false;
+		this._contain = 'none';
 	}
 
 	public setMaxWidth(maxWidth: number): void {
@@ -198,12 +202,28 @@ export class FastDomNode<T extends HTMLElement> {
 		this.domNode.style.visibility = this._visibility;
 	}
 
+	public setBackgroundColor(backgroundColor: string): void {
+		if (this._backgroundColor === backgroundColor) {
+			return;
+		}
+		this._backgroundColor = backgroundColor;
+		this.domNode.style.backgroundColor = this._backgroundColor;
+	}
+
 	public setLayerHinting(layerHint: boolean): void {
 		if (this._layerHint === layerHint) {
 			return;
 		}
 		this._layerHint = layerHint;
-		(<any>this.domNode.style).willChange = this._layerHint ? 'transform' : 'auto';
+		this.domNode.style.transform = this._layerHint ? 'translate3d(0px, 0px, 0px)' : '';
+	}
+
+	public setContain(contain: 'none' | 'strict' | 'content' | 'size' | 'layout' | 'style' | 'paint'): void {
+		if (this._contain === contain) {
+			return;
+		}
+		this._contain = contain;
+		(<any>this.domNode.style).contain = this._contain;
 	}
 
 	public setAttribute(name: string, value: string): void {

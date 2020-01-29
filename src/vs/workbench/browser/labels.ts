@@ -13,7 +13,7 @@ import { PLAINTEXT_MODE_ID } from 'vs/editor/common/modes/modesRegistry';
 import { IWorkspaceContextService } from 'vs/platform/workspace/common/workspace';
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 import { IModelService } from 'vs/editor/common/services/modelService';
-import { IUntitledEditorService } from 'vs/workbench/services/untitled/common/untitledEditorService';
+import { ITextFileService } from 'vs/workbench/services/textfile/common/textfiles';
 import { IDecorationsService, IResourceDecorationChangeEvent } from 'vs/workbench/services/decorations/browser/decorations';
 import { Schemas } from 'vs/base/common/network';
 import { FileKind, FILES_ASSOCIATIONS_CONFIG, IFileService } from 'vs/platform/files/common/files';
@@ -28,7 +28,7 @@ import { withNullAsUndefined } from 'vs/base/common/types';
 
 export interface IResourceLabelProps {
 	resource?: URI;
-	name?: string;
+	name?: string | string[];
 	description?: string;
 }
 
@@ -41,6 +41,7 @@ export interface IResourceLabelOptions extends IIconLabelValueOptions {
 export interface IFileLabelOptions extends IResourceLabelOptions {
 	hideLabel?: boolean;
 	hidePath?: boolean;
+	readonly parentCount?: number;
 }
 
 export interface IResourceLabel extends IDisposable {
@@ -96,7 +97,8 @@ export class ResourceLabels extends Disposable {
 		@IDecorationsService private readonly decorationsService: IDecorationsService,
 		@IThemeService private readonly themeService: IThemeService,
 		@IFileService private readonly fileService: IFileService,
-		@ILabelService private readonly labelService: ILabelService
+		@ILabelService private readonly labelService: ILabelService,
+		@ITextFileService private readonly textFileService: ITextFileService
 	) {
 		super();
 
@@ -148,9 +150,15 @@ export class ResourceLabels extends Disposable {
 			}
 		}));
 
+		// notify when label formatters change
 		this._register(this.labelService.onDidChangeFormatters(() => {
 			this._widgets.forEach(widget => widget.notifyFormattersChange());
 		}));
+
+		// notify when untitled labels change
+		this.textFileService.untitled.onDidChangeLabel(resource => {
+			this._widgets.forEach(widget => widget.notifyUntitledLabelChange(resource));
+		});
 	}
 
 	get(index: number): IResourceLabel {
@@ -164,7 +172,7 @@ export class ResourceLabels extends Disposable {
 		const label: IResourceLabel = {
 			element: widget.element,
 			onDidRender: widget.onDidRender,
-			setLabel: (label?: string, description?: string, options?: IIconLabelValueOptions) => widget.setLabel(label, description, options),
+			setLabel: (label: string, description?: string, options?: IIconLabelValueOptions) => widget.setLabel(label, description, options),
 			setResource: (label: IResourceLabelProps, options?: IResourceLabelOptions) => widget.setResource(label, options),
 			setEditor: (editor: IEditorInput, options?: IResourceLabelOptions) => widget.setEditor(editor, options),
 			setFile: (resource: URI, options?: IFileLabelOptions) => widget.setFile(resource, options),
@@ -219,9 +227,10 @@ export class ResourceLabel extends ResourceLabels {
 		@IDecorationsService decorationsService: IDecorationsService,
 		@IThemeService themeService: IThemeService,
 		@IFileService fileService: IFileService,
-		@ILabelService labelService: ILabelService
+		@ILabelService labelService: ILabelService,
+		@ITextFileService textFileService: ITextFileService
 	) {
-		super(DEFAULT_LABELS_CONTAINER, instantiationService, extensionService, configurationService, modelService, decorationsService, themeService, fileService, labelService);
+		super(DEFAULT_LABELS_CONTAINER, instantiationService, extensionService, configurationService, modelService, decorationsService, themeService, fileService, labelService, textFileService);
 
 		this._label = this._register(this.create(container, options));
 	}
@@ -259,7 +268,7 @@ class ResourceLabelWidget extends IconLabel {
 		@IModelService private readonly modelService: IModelService,
 		@IDecorationsService private readonly decorationsService: IDecorationsService,
 		@ILabelService private readonly labelService: ILabelService,
-		@IUntitledEditorService private readonly untitledEditorService: IUntitledEditorService,
+		@ITextFileService private readonly textFileService: ITextFileService,
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService
 	) {
 		super(container, options);
@@ -322,6 +331,12 @@ class ResourceLabelWidget extends IconLabel {
 		this.render(false);
 	}
 
+	notifyUntitledLabelChange(resource: URI): void {
+		if (resources.isEqual(resource, this.label?.resource)) {
+			this.render(false);
+		}
+	}
+
 	setResource(label: IResourceLabelProps, options?: IResourceLabelOptions): void {
 		const hasPathLabelChanged = this.hasPathLabelChanged(label, options);
 		const clearIconCache = this.clearIconCache(label, options);
@@ -367,7 +382,7 @@ class ResourceLabelWidget extends IconLabel {
 	setEditor(editor: IEditorInput, options?: IResourceLabelOptions): void {
 		this.setResource({
 			resource: toResource(editor, { supportSideBySide: SideBySideEditor.MASTER }),
-			name: withNullAsUndefined(editor.getName()),
+			name: editor.getName(),
 			description: editor.getDescription(options ? options.descriptionVerbosity : undefined)
 		}, options);
 	}
@@ -389,7 +404,7 @@ class ResourceLabelWidget extends IconLabel {
 		}
 
 		let description: string | undefined;
-		const hidePath = (options && options.hidePath) || (resource.scheme === Schemas.untitled && !this.untitledEditorService.hasAssociatedFilePath(resource));
+		const hidePath = (options && options.hidePath) || (resource.scheme === Schemas.untitled && !this.textFileService.untitled.hasAssociatedFilePath(resource));
 		if (!hidePath) {
 			description = this.labelService.getUriLabel(resources.dirname(resource), { relative: true });
 		}
@@ -404,7 +419,7 @@ class ResourceLabelWidget extends IconLabel {
 		this.computedIconClasses = undefined;
 		this.computedPathLabel = undefined;
 
-		this.setLabel();
+		this.setLabel('');
 	}
 
 	private render(clearIconCache: boolean): void {
@@ -442,11 +457,12 @@ class ResourceLabelWidget extends IconLabel {
 			title: '',
 			italic: this.options && this.options.italic,
 			matches: this.options && this.options.matches,
-			extraClasses: []
+			extraClasses: [],
+			separator: this.options?.separator,
+			domId: this.options?.domId
 		};
 
 		const resource = this.label.resource;
-		const label = this.label.name;
 
 		if (this.options && typeof this.options.title === 'string') {
 			iconLabelOptions.title = this.options.title;
@@ -490,6 +506,17 @@ class ResourceLabelWidget extends IconLabel {
 				if (this.options.fileDecorations.badges) {
 					iconLabelOptions.extraClasses.push(deco.badgeClassName);
 				}
+			}
+		}
+
+		let label = this.label.name || '';
+		if (resource?.scheme === Schemas.untitled) {
+			// Untitled labels are very dynamic because they may change
+			// whenever the content changes. As such we always ask the
+			// text file service for the name of the untitled editor
+			const untitledName = this.textFileService.untitled.get(resource)?.getName();
+			if (untitledName) {
+				label = untitledName;
 			}
 		}
 

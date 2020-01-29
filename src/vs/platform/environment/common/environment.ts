@@ -5,6 +5,7 @@
 
 import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
 import { URI } from 'vs/base/common/uri';
+import { IUserHomeProvider } from 'vs/base/common/labels';
 
 export interface ParsedArgs {
 	_: string[];
@@ -84,6 +85,10 @@ export interface ParsedArgs {
 	'js-flags'?: string;
 	'disable-gpu'?: boolean;
 	'nolazy'?: boolean;
+	'force-device-scale-factor'?: string;
+	'force-renderer-accessibility'?: boolean;
+	'ignore-certificate-error'?: boolean;
+	'allow-insecure-localhost'?: boolean;
 }
 
 export const IEnvironmentService = createDecorator<IEnvironmentService>('environmentService');
@@ -99,7 +104,7 @@ export interface IExtensionHostDebugParams extends IDebugParams {
 
 export const BACKUPS = 'Backups';
 
-export interface IEnvironmentService {
+export interface IEnvironmentService extends IUserHomeProvider {
 
 	_serviceBrand: undefined;
 
@@ -123,7 +128,9 @@ export interface IEnvironmentService {
 
 	// sync resources
 	userDataSyncLogResource: URI;
+	userDataSyncHome: URI;
 	settingsSyncPreviewResource: URI;
+	keybindingsSyncPreviewResource: URI;
 
 	machineSettingsHome: URI;
 	machineSettingsResource: URI;

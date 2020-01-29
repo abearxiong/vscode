@@ -16,6 +16,7 @@ import * as strings from 'vs/base/common/strings';
 import { ITextAreaWrapper, ITypeData, TextAreaState } from 'vs/editor/browser/controller/textAreaState';
 import { Position } from 'vs/editor/common/core/position';
 import { Selection } from 'vs/editor/common/core/selection';
+import { BrowserFeatures } from 'vs/base/browser/canIUse';
 
 export interface ICompositionData {
 	data: string;
@@ -40,12 +41,14 @@ export interface ClipboardDataToCopy {
 	multicursorText: string[] | null | undefined;
 	text: string;
 	html: string | null | undefined;
+	mode: string | null;
 }
 
 export interface ClipboardStoredMetadata {
 	version: 1;
 	isFromEmptySelection: boolean | undefined;
 	multicursorText: string[] | null | undefined;
+	mode: string | null;
 }
 
 export interface ITextAreaInputHost {
@@ -162,7 +165,7 @@ export class TextAreaInput extends Disposable {
 	private _isDoingComposition: boolean;
 	private _nextCommand: ReadFromTextArea;
 
-	constructor(host: ITextAreaInputHost, textArea: FastDomNode<HTMLTextAreaElement>) {
+	constructor(host: ITextAreaInputHost, private textArea: FastDomNode<HTMLTextAreaElement>) {
 		super();
 		this._host = host;
 		this._textArea = this._register(new TextAreaWrapper(textArea));
@@ -273,7 +276,11 @@ export class TextAreaInput extends Disposable {
 
 		this._register(dom.addDisposableListener(textArea.domNode, 'compositionend', (e: CompositionEvent) => {
 			this._lastTextAreaEvent = TextAreaInputEventType.compositionend;
-
+			// https://github.com/microsoft/monaco-editor/issues/1663
+			// On iOS 13.2, Chinese system IME randomly trigger an additional compositionend event with empty data
+			if (!this._isDoingComposition) {
+				return;
+			}
 			if (compositionDataInValid(e.locale)) {
 				// https://github.com/Microsoft/monaco-editor/issues/339
 				const [newState, typeInput] = deduceInputFromTextAreaValue(/*couldBeEmojiInput*/false, /*couldBeTypingAtOffset0*/false);
@@ -476,10 +483,21 @@ export class TextAreaInput extends Disposable {
 		// Setting this._hasFocus and writing the screen reader content
 		// will result in a focus() and setSelectionRange() in the textarea
 		this._setHasFocus(true);
+
+		// If the editor is off DOM, focus cannot be really set, so let's double check that we have managed to set the focus
+		this.refreshFocusState();
 	}
 
 	public isFocused(): boolean {
 		return this._hasFocus;
+	}
+
+	public refreshFocusState(): void {
+		if (document.body.contains(this.textArea.domNode) && document.activeElement === this.textArea.domNode) {
+			this._setHasFocus(true);
+		} else {
+			this._setHasFocus(false);
+		}
 	}
 
 	private _setHasFocus(newHasFocus: boolean): void {
@@ -533,11 +551,12 @@ export class TextAreaInput extends Disposable {
 	}
 
 	private _ensureClipboardGetsEditorSelection(e: ClipboardEvent): void {
-		const dataToCopy = this._host.getDataToCopy(ClipboardEventUtils.canUseTextData(e) && browser.hasClipboardSupport());
+		const dataToCopy = this._host.getDataToCopy(ClipboardEventUtils.canUseTextData(e) && BrowserFeatures.clipboard.richText);
 		const storedMetadata: ClipboardStoredMetadata = {
 			version: 1,
 			isFromEmptySelection: dataToCopy.isFromEmptySelection,
-			multicursorText: dataToCopy.multicursorText
+			multicursorText: dataToCopy.multicursorText,
+			mode: dataToCopy.mode
 		};
 		InMemoryClipboardMetadataManager.INSTANCE.set(
 			// When writing "LINE\r\n" to the clipboard and then pasting,

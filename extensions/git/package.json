@@ -27,6 +27,11 @@
   "contributes": {
     "commands": [
       {
+        "command": "git.setLogLevel",
+        "title": "%command.setLogLevel%",
+        "category": "Git"
+      },
+      {
         "command": "git.clone",
         "title": "%command.clone%",
         "category": "Git"
@@ -1141,11 +1146,6 @@
         },
         {
           "command": "git.openChange",
-          "when": "scmProvider == git && scmResourceGroup == workingTree",
-          "group": "navigation"
-        },
-        {
-          "command": "git.openChange",
           "when": "scmProvider == git && scmResourceGroup == untracked",
           "group": "navigation"
         },
@@ -1372,7 +1372,10 @@
           "default": false
         },
         "git.defaultCloneDirectory": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null,
           "description": "%config.defaultCloneDirectory%"
         },
@@ -1762,9 +1765,10 @@
   },
   "dependencies": {
     "byline": "^5.0.0",
+    "dayjs": "1.8.19",
     "file-type": "^7.2.0",
     "iconv-lite": "^0.4.24",
-    "jschardet": "^1.6.0",
+    "jschardet": "2.1.1",
     "vscode-extension-telemetry": "0.1.1",
     "vscode-nls": "^4.0.0",
     "vscode-uri": "^2.0.0",

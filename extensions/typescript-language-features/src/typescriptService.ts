@@ -21,7 +21,7 @@ export namespace ServerResponse {
 		) { }
 	}
 
-	export const NoContent = new class { readonly type = 'noContent'; };
+	export const NoContent = { type: 'noContent' } as const;
 
 	export type Response<T extends Proto.Response> = T | Cancelled | typeof NoContent;
 }
@@ -58,6 +58,9 @@ interface StandardTsServerRequests {
 	'signatureHelp': [Proto.SignatureHelpRequestArgs, Proto.SignatureHelpResponse];
 	'typeDefinition': [Proto.FileLocationRequestArgs, Proto.TypeDefinitionResponse];
 	'updateOpen': [Proto.UpdateOpenRequestArgs, Proto.Response];
+	'prepareCallHierarchy': [Proto.FileLocationRequestArgs, Proto.PrepareCallHierarchyResponse];
+	'provideCallHierarchyIncomingCalls': [Proto.FileLocationRequestArgs, Proto.ProvideCallHierarchyIncomingCallsResponse];
+	'provideCallHierarchyOutgoingCalls': [Proto.FileLocationRequestArgs, Proto.ProvideCallHierarchyOutgoingCallsResponse];
 }
 
 interface NoResponseTsServerRequests {
@@ -78,6 +81,7 @@ export type TypeScriptRequests = StandardTsServerRequests & NoResponseTsServerRe
 export type ExecConfig = {
 	readonly lowPriority?: boolean;
 	readonly nonRecoverable?: boolean;
+	readonly cancelOnResourceChange?: vscode.Uri
 };
 
 export interface ITypeScriptServiceClient {

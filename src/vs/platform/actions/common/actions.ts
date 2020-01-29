@@ -5,13 +5,14 @@
 
 import { Action } from 'vs/base/common/actions';
 import { SyncDescriptor0, createSyncDescriptor } from 'vs/platform/instantiation/common/descriptors';
-import { IConstructorSignature2, createDecorator } from 'vs/platform/instantiation/common/instantiation';
-import { IKeybindings, KeybindingsRegistry } from 'vs/platform/keybinding/common/keybindingsRegistry';
+import { IConstructorSignature2, createDecorator, BrandedService, ServicesAccessor } from 'vs/platform/instantiation/common/instantiation';
+import { IKeybindings, KeybindingsRegistry, IKeybindingRule } from 'vs/platform/keybinding/common/keybindingsRegistry';
 import { ContextKeyExpr, IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
-import { ICommandService, ICommandHandler, CommandsRegistry } from 'vs/platform/commands/common/commands';
-import { IDisposable } from 'vs/base/common/lifecycle';
+import { ICommandService, CommandsRegistry, ICommandHandlerDescription } from 'vs/platform/commands/common/commands';
+import { IDisposable, DisposableStore } from 'vs/base/common/lifecycle';
 import { Event, Emitter } from 'vs/base/common/event';
 import { URI, UriComponents } from 'vs/base/common/uri';
+import { ThemeIcon } from 'vs/platform/theme/common/themeService';
 
 export interface ILocalizedString {
 	value: string;
@@ -22,7 +23,7 @@ export interface ICommandAction {
 	id: string;
 	title: string | ILocalizedString;
 	category?: string | ILocalizedString;
-	iconLocation?: { dark: URI; light?: URI; };
+	icon?: { dark?: URI; light?: URI; } | ThemeIcon;
 	precondition?: ContextKeyExpr;
 	toggled?: ContextKeyExpr;
 }
@@ -64,10 +65,13 @@ export const enum MenuId {
 	DebugWatchContext,
 	DebugToolBar,
 	EditorContext,
+	EditorContextPeek,
 	EditorTitle,
 	EditorTitleContext,
 	EmptyEditorGroupContext,
 	ExplorerContext,
+	ExtensionContext,
+	GlobalActivity,
 	MenubarAppearanceMenu,
 	MenubarDebugMenu,
 	MenubarEditMenu,
@@ -95,13 +99,18 @@ export const enum MenuId {
 	StatusBarWindowIndicatorMenu,
 	TouchBarContext,
 	TitleBarContext,
+	TunnelContext,
+	TunnelInline,
+	TunnelTitle,
 	ViewItemContext,
 	ViewTitle,
+	ViewTitleContext,
 	CommentThreadTitle,
 	CommentThreadActions,
 	CommentTitle,
 	CommentActions,
-	GlobalActivity
+	BulkEditTitle,
+	BulkEditContext,
 }
 
 export interface IMenuActionOptions {
@@ -295,7 +304,13 @@ export class SyncActionDescriptor {
 	private readonly _keybindingContext: ContextKeyExpr | undefined;
 	private readonly _keybindingWeight: number | undefined;
 
-	constructor(ctor: IConstructorSignature2<string, string, Action>,
+	public static create<Services extends BrandedService[]>(ctor: { new(id: string, label: string, ...services: Services): Action },
+		id: string, label: string | undefined, keybindings?: IKeybindings, keybindingContext?: ContextKeyExpr, keybindingWeight?: number
+	): SyncActionDescriptor {
+		return new SyncActionDescriptor(ctor as IConstructorSignature2<string, string, Action>, id, label, keybindings, keybindingContext, keybindingWeight);
+	}
+
+	private constructor(ctor: IConstructorSignature2<string, string, Action>,
 		id: string, label: string | undefined, keybindings?: IKeybindings, keybindingContext?: ContextKeyExpr, keybindingWeight?: number
 	) {
 		this._id = id;
@@ -331,62 +346,79 @@ export class SyncActionDescriptor {
 	}
 }
 
+//#region --- IAction2
 
-export interface IActionDescriptor {
-	id: string;
-	handler: ICommandHandler;
+type OneOrN<T> = T | T[];
 
-	// ICommandUI
-	title?: ILocalizedString;
-	category?: string;
+export interface IAction2Options extends ICommandAction {
+
+	/**
+	 * Shorthand to add this command to the command palette
+	 */
 	f1?: boolean;
 
-	//
-	menu?: {
-		menuId: MenuId,
-		when?: ContextKeyExpr;
-		group?: string;
-	};
+	/**
+	 * One or many menu items.
+	 */
+	menu?: OneOrN<{ id: MenuId } & Omit<IMenuItem, 'command'>>;
 
-	//
-	keybinding?: {
-		when?: ContextKeyExpr;
-		weight?: number;
-		keys: IKeybindings;
-	};
+	/**
+	 * One keybinding.
+	 */
+	keybinding?: OneOrN<Omit<IKeybindingRule, 'id'>>;
+
+	/**
+	 * Metadata about this command, used for API commands or when
+	 * showing keybindings that have no other UX.
+	 */
+	description?: ICommandHandlerDescription;
 }
 
+export abstract class Action2 {
+	constructor(readonly desc: Readonly<IAction2Options>) { }
+	abstract run(accessor: ServicesAccessor, ...args: any[]): any;
+}
 
-export function registerAction(desc: IActionDescriptor) {
+export function registerAction2(ctor: { new(): Action2 }): IDisposable {
+	const disposables = new DisposableStore();
+	const action = new ctor();
 
-	const { id, handler, title, category, menu, keybinding } = desc;
+	// command
+	disposables.add(CommandsRegistry.registerCommand({
+		id: action.desc.id,
+		handler: (accessor, ...args) => action.run(accessor, ...args),
+		description: action.desc.description,
+	}));
 
-	// 1) register as command
-	CommandsRegistry.registerCommand(id, handler);
-
-	// 2) menus
-	if (menu && title) {
-		let command = { id, title, category };
-		let { menuId, when, group } = menu;
-		MenuRegistry.appendMenuItem(menuId, {
-			command,
-			when,
-			group
-		});
+	// menu
+	if (Array.isArray(action.desc.menu)) {
+		for (let item of action.desc.menu) {
+			disposables.add(MenuRegistry.appendMenuItem(item.id, { command: action.desc, ...item }));
+		}
+	} else if (action.desc.menu) {
+		disposables.add(MenuRegistry.appendMenuItem(action.desc.menu.id, { command: action.desc, ...action.desc.menu }));
+	}
+	if (action.desc.f1) {
+		disposables.add(MenuRegistry.appendMenuItem(MenuId.CommandPalette, { command: action.desc, ...action.desc }));
 	}
 
-	// 3) keybindings
-	if (keybinding) {
-		let { when, weight, keys } = keybinding;
+	// keybinding
+	if (Array.isArray(action.desc.keybinding)) {
+		for (let item of action.desc.keybinding) {
+			KeybindingsRegistry.registerKeybindingRule({
+				...item,
+				id: action.desc.id,
+				when: ContextKeyExpr.and(action.desc.precondition, item.when)
+			});
+		}
+	} else if (action.desc.keybinding) {
 		KeybindingsRegistry.registerKeybindingRule({
-			id,
-			when,
-			weight: weight || 0,
-			primary: keys.primary,
-			secondary: keys.secondary,
-			linux: keys.linux,
-			mac: keys.mac,
-			win: keys.win
+			...action.desc.keybinding,
+			id: action.desc.id,
+			when: ContextKeyExpr.and(action.desc.precondition, action.desc.keybinding.when)
 		});
 	}
+
+	return disposables;
 }
+//#endregion

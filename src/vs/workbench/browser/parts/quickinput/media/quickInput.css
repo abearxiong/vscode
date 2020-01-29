@@ -45,6 +45,10 @@
 	background-repeat: no-repeat;
 }
 
+.quick-input-description {
+	margin: 6px;
+}
+
 .quick-input-header {
 	display: flex;
 	padding: 6px 6px 0px 6px;
@@ -182,6 +186,10 @@
 	align-items: center;
 }
 
+.quick-input-list .quick-input-list-rows > .quick-input-list-row .codicon {
+	vertical-align: sub;
+}
+
 .quick-input-list .quick-input-list-rows .monaco-highlighted-label span {
 	opacity: 1;
 }
@@ -216,8 +224,7 @@
 	margin: 0;
 	width: 19px;
 	height: 100%;
-	background-position: center;
-	background-repeat: no-repeat;
+	vertical-align: middle;
 }
 
 .quick-input-list .quick-input-list-entry-action-bar {

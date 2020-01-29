@@ -36,7 +36,7 @@ export interface IPeekViewService {
 registerSingleton(IPeekViewService, class implements IPeekViewService {
 	_serviceBrand: undefined;
 
-	private readonly _widgets = new Map<ICodeEditor, { widget: PeekViewWidget, listener: IDisposable }>();
+	private readonly _widgets = new Map<ICodeEditor, { widget: PeekViewWidget, listener: IDisposable; }>();
 
 	addExclusiveWidget(editor: ICodeEditor, widget: PeekViewWidget): void {
 		const existing = this._widgets.get(editor);
@@ -219,8 +219,9 @@ export abstract class PeekViewWidget extends ZoneWidget {
 		if (this._metaHeading) {
 			if (value) {
 				this._metaHeading.innerHTML = strings.escape(value);
+				dom.show(this._metaHeading);
 			} else {
-				dom.clearNode(this._metaHeading);
+				dom.hide(this._metaHeading);
 			}
 		}
 	}
@@ -259,7 +260,7 @@ export abstract class PeekViewWidget extends ZoneWidget {
 
 export const peekViewTitleBackground = registerColor('peekViewTitle.background', { dark: '#1E1E1E', light: '#FFFFFF', hc: '#0C141F' }, nls.localize('peekViewTitleBackground', 'Background color of the peek view title area.'));
 export const peekViewTitleForeground = registerColor('peekViewTitleLabel.foreground', { dark: '#FFFFFF', light: '#333333', hc: '#FFFFFF' }, nls.localize('peekViewTitleForeground', 'Color of the peek view title.'));
-export const peekViewTitleInfoForeground = registerColor('peekViewTitleDescription.foreground', { dark: '#ccccccb3', light: '#6c6c6cb3', hc: '#FFFFFF99' }, nls.localize('peekViewTitleInfoForeground', 'Color of the peek view title info.'));
+export const peekViewTitleInfoForeground = registerColor('peekViewTitleDescription.foreground', { dark: '#ccccccb3', light: '#616161e6', hc: '#FFFFFF99' }, nls.localize('peekViewTitleInfoForeground', 'Color of the peek view title info.'));
 export const peekViewBorder = registerColor('peekView.border', { dark: '#007acc', light: '#007acc', hc: contrastBorder }, nls.localize('peekViewBorder', 'Color of the peek view borders and arrow.'));
 
 export const peekViewResultsBackground = registerColor('peekViewResult.background', { dark: '#252526', light: '#F3F3F3', hc: Color.black }, nls.localize('peekViewResultsBackground', 'Background color of the peek view result list.'));

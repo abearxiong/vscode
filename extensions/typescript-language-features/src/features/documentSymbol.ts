@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import * as Proto from '../protocol';
+import type * as Proto from '../protocol';
 import * as PConst from '../protocol.const';
 import { ITypeScriptServiceClient } from '../typescriptService';
 import * as typeConverters from '../utils/typeConverters';
@@ -66,12 +66,13 @@ class TypeScriptDocumentSymbolProvider implements vscode.DocumentSymbolProvider 
 		const children = new Set(item.childItems || []);
 		for (const span of item.spans) {
 			const range = typeConverters.Range.fromTextSpan(span);
+			const selectionRange = item.nameSpan ? typeConverters.Range.fromTextSpan(item.nameSpan) : range;
 			const symbolInfo = new vscode.DocumentSymbol(
 				item.text,
 				'',
 				getSymbolKind(item.kind),
 				range,
-				range);
+				range.contains(selectionRange) ? selectionRange : range);
 
 			for (const child of children) {
 				if (child.spans.some(span => !!range.intersection(typeConverters.Range.fromTextSpan(span)))) {

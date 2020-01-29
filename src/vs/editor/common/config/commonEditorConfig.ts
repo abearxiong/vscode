@@ -11,7 +11,7 @@ import * as arrays from 'vs/base/common/arrays';
 import { IEditorOptions, editorOptionsRegistry, ValidatedEditorOptions, IEnvironmentalOptions, IComputedEditorOptions, ConfigurationChangedEvent, EDITOR_MODEL_DEFAULTS, EditorOption, FindComputedEditorOptionValueById } from 'vs/editor/common/config/editorOptions';
 import { EditorZoom } from 'vs/editor/common/config/editorZoom';
 import { BareFontInfo, FontInfo } from 'vs/editor/common/config/fontInfo';
-import * as editorCommon from 'vs/editor/common/editorCommon';
+import { IConfiguration, IDimension } from 'vs/editor/common/editorCommon';
 import { ConfigurationScope, Extensions, IConfigurationNode, IConfigurationRegistry, IConfigurationPropertySchema } from 'vs/platform/configuration/common/configurationRegistry';
 import { Registry } from 'vs/platform/registry/common/platform';
 import { AccessibilitySupport } from 'vs/platform/accessibility/common/accessibility';
@@ -256,6 +256,20 @@ function migrateOptions(options: IEditorOptions): void {
 			enabled: false
 		};
 	}
+
+	const autoIndent = options.autoIndent;
+	if (<any>autoIndent === true) {
+		options.autoIndent = 'full';
+	} else if (<any>autoIndent === false) {
+		options.autoIndent = 'advanced';
+	}
+
+	const matchBrackets = options.matchBrackets;
+	if (<any>matchBrackets === true) {
+		options.matchBrackets = 'always';
+	} else if (<any>matchBrackets === false) {
+		options.matchBrackets = 'never';
+	}
 }
 
 function deepCloneAndMigrateOptions(_options: IEditorOptions): IEditorOptions {
@@ -264,7 +278,7 @@ function deepCloneAndMigrateOptions(_options: IEditorOptions): IEditorOptions {
 	return options;
 }
 
-export abstract class CommonEditorConfiguration extends Disposable implements editorCommon.IConfiguration {
+export abstract class CommonEditorConfiguration extends Disposable implements IConfiguration {
 
 	private _onDidChange = this._register(new Emitter<ConfigurationChangedEvent>());
 	public readonly onDidChange: Event<ConfigurationChangedEvent> = this._onDidChange.event;
@@ -294,7 +308,7 @@ export abstract class CommonEditorConfiguration extends Disposable implements ed
 		this._register(TabFocus.onDidChangeTabFocus(_ => this._recomputeOptions()));
 	}
 
-	public observeReferenceElement(dimension?: editorCommon.IDimension): void {
+	public observeReferenceElement(dimension?: IDimension): void {
 	}
 
 	public dispose(): void {
@@ -342,18 +356,6 @@ export abstract class CommonEditorConfiguration extends Disposable implements ed
 		return EditorConfiguration2.computeOptions(this._validatedOptions, env);
 	}
 
-	private static _primitiveArrayEquals(a: any[], b: any[]): boolean {
-		if (a.length !== b.length) {
-			return false;
-		}
-		for (let i = 0; i < a.length; i++) {
-			if (a[i] !== b[i]) {
-				return false;
-			}
-		}
-		return true;
-	}
-
 	private static _subsetEquals(base: { [key: string]: any }, subset: { [key: string]: any }): boolean {
 		for (const key in subset) {
 			if (hasOwnProperty.call(subset, key)) {
@@ -364,7 +366,7 @@ export abstract class CommonEditorConfiguration extends Disposable implements ed
 					continue;
 				}
 				if (Array.isArray(baseValue) && Array.isArray(subsetValue)) {
-					if (!this._primitiveArrayEquals(baseValue, subsetValue)) {
+					if (!arrays.equals(baseValue, subsetValue)) {
 						return false;
 					}
 					continue;
@@ -425,14 +427,17 @@ export abstract class CommonEditorConfiguration extends Disposable implements ed
 
 }
 
-const configurationRegistry = Registry.as<IConfigurationRegistry>(Extensions.Configuration);
-const editorConfiguration: IConfigurationNode = {
+export const editorConfigurationBaseNode = Object.freeze<IConfigurationNode>({
 	id: 'editor',
 	order: 5,
 	type: 'object',
 	title: nls.localize('editorConfigurationTitle', "Editor"),
-	overridable: true,
-	scope: ConfigurationScope.RESOURCE,
+	scope: ConfigurationScope.LANGUAGE_OVERRIDABLE,
+});
+
+const configurationRegistry = Registry.as<IConfigurationRegistry>(Extensions.Configuration);
+const editorConfiguration: IConfigurationNode = {
+	...editorConfigurationBaseNode,
 	properties: {
 		'editor.tabSize': {
 			type: 'number',
@@ -488,29 +493,6 @@ const editorConfiguration: IConfigurationNode = {
 			type: 'integer',
 			default: 20_000,
 			description: nls.localize('maxTokenizationLineLength', "Lines above this length will not be tokenized for performance reasons")
-		},
-		'editor.codeActionsOnSave': {
-			type: 'object',
-			properties: {
-				'source.organizeImports': {
-					type: 'boolean',
-					description: nls.localize('codeActionsOnSave.organizeImports', "Controls whether organize imports action should be run on file save.")
-				},
-				'source.fixAll': {
-					type: 'boolean',
-					description: nls.localize('codeActionsOnSave.fixAll', "Controls whether auto fix action should be run on file save.")
-				}
-			},
-			'additionalProperties': {
-				type: 'boolean'
-			},
-			default: {},
-			description: nls.localize('codeActionsOnSave', "Code action kinds to be run on save.")
-		},
-		'editor.codeActionsOnSaveTimeout': {
-			type: 'number',
-			default: 750,
-			description: nls.localize('codeActionsOnSaveTimeout', "Timeout in milliseconds after which the code actions that are run on save are cancelled.")
 		},
 		'diffEditor.maxComputationTime': {
 			type: 'number',

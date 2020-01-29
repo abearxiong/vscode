@@ -6,6 +6,8 @@
 .extension-editor {
 	height: 100%;
 	overflow: hidden;
+	display: flex;
+	flex-direction: column;
 }
 
 .extension-editor .clickable {
@@ -114,6 +116,13 @@
 	font-size: 18px;
 }
 
+.extension-editor > .header > .details > .subtitle,
+.extension-editor > .header > .details > .subtitle .install,
+.extension-editor > .header > .details > .subtitle .rating {
+	display: flex;
+	align-items: center;
+}
+
 .extension-editor > .header > .details > .subtitle > .install > .count {
 	margin-left: 6px;
 }
@@ -181,7 +190,7 @@
 }
 
 .extension-editor > .body {
-	height: calc(100% - 168px);
+	flex: 1;
 	overflow: hidden;
 }
 

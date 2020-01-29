@@ -20,11 +20,10 @@ import { FileOperationError, FileOperationResult, FileChangesEvent, IFileService
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IWorkspaceContextService } from 'vs/platform/workspace/common/workspace';
 import { IStorageService } from 'vs/platform/storage/common/storage';
-import { ITextResourceConfigurationService } from 'vs/editor/common/services/resourceConfiguration';
+import { ITextResourceConfigurationService } from 'vs/editor/common/services/textResourceConfigurationService';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { ScrollType } from 'vs/editor/common/editorCommon';
-import { IHostService } from 'vs/workbench/services/host/browser/host';
 import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { IEditorGroupsService, IEditorGroup } from 'vs/workbench/services/editor/common/editorGroupsService';
 import { CancellationToken } from 'vs/base/common/cancellation';
@@ -54,11 +53,10 @@ export class TextFileEditor extends BaseTextEditor {
 		@IEditorService editorService: IEditorService,
 		@IThemeService themeService: IThemeService,
 		@IEditorGroupsService editorGroupService: IEditorGroupsService,
-		@ITextFileService textFileService: ITextFileService,
-		@IHostService hostService: IHostService,
+		@ITextFileService private readonly textFileService: ITextFileService,
 		@IExplorerService private readonly explorerService: IExplorerService
 	) {
-		super(TextFileEditor.ID, telemetryService, instantiationService, storageService, configurationService, themeService, textFileService, editorService, editorGroupService, hostService);
+		super(TextFileEditor.ID, telemetryService, instantiationService, storageService, configurationService, themeService, editorService, editorGroupService);
 
 		this.updateRestoreViewStateConfiguration();
 
@@ -80,7 +78,7 @@ export class TextFileEditor extends BaseTextEditor {
 	}
 
 	private updateRestoreViewStateConfiguration(): void {
-		this.restoreViewState = this.configurationService.getValue(undefined, 'workbench.editor.restoreViewState');
+		this.restoreViewState = this.textResourceConfigurationService.getValue(undefined, 'workbench.editor.restoreViewState');
 	}
 
 	getTitle(): string {
@@ -112,14 +110,6 @@ export class TextFileEditor extends BaseTextEditor {
 		// being set.
 		if (editor === this.input || !this.restoreViewState) {
 			this.doSaveOrClearTextEditorViewState(editor);
-		}
-	}
-
-	setOptions(options: EditorOptions | undefined): void {
-		const textOptions = options as TextEditorOptions;
-		if (textOptions && isFunction(textOptions.apply)) {
-			const textEditor = assertIsDefined(this.getControl());
-			textOptions.apply(textEditor, ScrollType.Smooth);
 		}
 	}
 
@@ -162,7 +152,11 @@ export class TextFileEditor extends BaseTextEditor {
 				(<TextEditorOptions>options).apply(textEditor, ScrollType.Immediate);
 			}
 
-			// Readonly flag
+			// Since the resolved model provides information about being readonly
+			// or not, we apply it here to the editor even though the editor input
+			// was already asked for being readonly or not. The rationale is that
+			// a resolved model might have more specific information about being
+			// readonly or not that the input did not have.
 			textEditor.updateOptions({ readOnly: textFileModel.isReadonly() });
 		} catch (error) {
 			this.handleSetInputError(error, input, options);
@@ -241,14 +235,13 @@ export class TextFileEditor extends BaseTextEditor {
 	}
 
 	protected getAriaLabel(): string {
-		const input = this.input;
-		const inputName = input?.getName();
+		const inputName = this.input?.getName();
 
 		let ariaLabel: string;
-		if (inputName) {
-			ariaLabel = nls.localize('fileEditorWithInputAriaLabel', "{0}. Text file editor.", inputName);
+		if (this.input?.isReadonly()) {
+			ariaLabel = inputName ? nls.localize('readonlyFileEditorWithInputAriaLabel', "{0} readonly editor", inputName) : nls.localize('readonlyFileEditorAriaLabel', "Readonly editor");
 		} else {
-			ariaLabel = nls.localize('fileEditorAriaLabel', "Text file editor.");
+			ariaLabel = inputName ? nls.localize('fileEditorWithInputAriaLabel', "{0} editor", inputName) : nls.localize('fileEditorAriaLabel', "Editor");
 		}
 
 		return ariaLabel;
